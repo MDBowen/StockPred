@@ -164,8 +164,9 @@ class Simulate_Portfolio:
     def update_investment(self, name, value):
         
         if value<=self.balance:
-            self.investments_states[name][1] += value
-            self.balance -= value
+            prev_holding = self.investments_states[name][1]
+            self.investments_states[name][1] = value
+            self.balance += prev_holding- value
         else:
             raise ValueError(f"Attempted investment exceeds porfolio's balance, balance:{self.balance}, attempted investment: {value}")
         
