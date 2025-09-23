@@ -105,7 +105,7 @@ class Portfolio:
         
 
 class Simulate_Portfolio:
-    def __init__(self, init_datetime, balance = 1000.0):
+    def __init__(self, init_datetime, balance = 100.0):
         
         
         self.investments_timesteps = {} 
@@ -163,10 +163,10 @@ class Simulate_Portfolio:
             
     def update_investment(self, name, value):
         
-        if value<=self.balance:
+        if value<=(self.balance + self.investments_states[name][1]): # check if new value is less or equal to balance + current holding
             prev_holding = self.investments_states[name][1]
             self.investments_states[name][1] = value
-            self.balance += prev_holding- value
+            self.balance += prev_holding- value # subtract increase in holding from balance so the increase is paid
         else:
             raise ValueError(f"Attempted investment exceeds porfolio's balance, balance:{self.balance}, attempted investment: {value}")
         
