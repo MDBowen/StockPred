@@ -105,9 +105,14 @@ class Portfolio:
         
 
 class Simulate_Portfolio:
-    def __init__(self, init_datetime, balance = 100.0):
+    def __init__(self, init_datetime, balance = 100.0, interval = 24):
         
+        self.timestep_hours = interval
         
+        if interval>=24:
+            self.interval_str = '1d'
+        else:
+            self.interval_str = f'{interval}h'
         self.investments_timesteps = {} 
         self.investments_future_steps = {}
         # such that investment_timesteps[name][-1] is current close
@@ -122,13 +127,13 @@ class Simulate_Portfolio:
     def add_investment(self, name):
         
         self.investments[name] = yf.Ticker(name)
-        self.investments_timesteps[name] = [self.investments[name].history(start=self.datetime-timedelta(days=1), end=self.datetime, interval='1d')['Close'].iloc[-1]]
-        self.investments_future_steps[name] = self.investments[name].history(start = self.datetime, end = datetime.now(), interval = '1d')['Close']
+        self.investments_timesteps[name] = [self.investments[name].history(start=self.datetime-timedelta(days=1), end=self.datetime, interval=self.interval_str)['Close'].iloc[-1]]
+        self.investments_future_steps[name] = self.investments[name].history(start = self.datetime, end = datetime.now(), interval = self.interval_str)['Close']
         self.investments_states[name] = np.array([self.investments_timesteps[name][-1], 0])
 
     def get_current_timestep(self, ticker):
-        return ticker.history(start=self.datetime-timedelta(days=10), end=self.datetime, interval='1d')['Close'].iloc[-1]
-        
+        return ticker.history(start=self.datetime-timedelta(hours=self.timestep_hours*5), end=self.datetime, interval=self.interval_str)['Close'].iloc[-1]
+
     def get_current_timestep_sim(self, name):
         
         df = self.investments_future_steps[name]
@@ -139,15 +144,13 @@ class Simulate_Portfolio:
             try:
                 val = df.loc[dtime.strftime('%Y-%m-%d')]
             except:
-                dtime += timedelta(days=1)
+                dtime += timedelta(hours=self.timestep_hours)
             else:
                 return val, dtime
-            
-        
         
     def next_timestep(self):
         
-        self.datetime += timedelta(days=1)
+        self.datetime += timedelta(hours=self.timestep_hours)
         
         for name, ticker in self.investments.items():
             previous_state = self.investments_states[name]
@@ -163,12 +166,20 @@ class Simulate_Portfolio:
             
     def update_investment(self, name, value):
         
+        value = min(value, self.balance + self.investments_states[name][1]) # cannot invest more than total portfolio value
+        value = max(value, 0) # cannot have negative investment
+        
         if value<=(self.balance + self.investments_states[name][1]): # check if new value is less or equal to balance + current holding
             prev_holding = self.investments_states[name][1]
+            
+            
+            if self.balance + prev_holding - value < 0:
+                raise ValueError(f"Value update error, value: {value}, prev_holding: {prev_holding}, balance: {self.balance}")  
+            
             self.investments_states[name][1] = value
-            self.balance += prev_holding- value # subtract increase in holding from balance so the increase is paid
+            self.balance += prev_holding - value # subtract increase in holding from balance so the increase is paid
         else:
-            raise ValueError(f"Attempted investment exceeds porfolio's balance, balance:{self.balance}, attempted investment: {value}")
+            raise ValueError(f"Attempted investment exceeds porfolio's total, total:{self.balance + self.investments_states[name][1]}, attempted investment: {value}")
         
     def get_portfolio_net(self):
         net = self.balance
