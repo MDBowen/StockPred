@@ -1,5 +1,6 @@
 """ Generates a real-time (or stored data) stock investment 
 environment for reinforcement learning models."""
+"""Currently only designed to support hourly and daily intervals."""
 
 import numpy as np
 import pandas as pd
@@ -19,9 +20,8 @@ class Simulate_Portfolio:
             self.interval_str = f'{interval}h'
         self.investments_timesteps = {} 
         self.investments_future_steps = {}
-        # such that investment_timesteps[name][-1] is current close
         self.investments = {}
-        self.investments_states = {} # :: Name : [price, holdings]
+        self.investments_states = {}
         self.datetime = init_datetime
         self.init_date = init_datetime
         self.timestep = 0 
@@ -38,50 +38,71 @@ class Simulate_Portfolio:
     def get_current_timestep(self, ticker):
         return ticker.history(start=self.datetime-timedelta(hours=self.timestep_hours*5), end=self.datetime, interval=self.interval_str)['Close'].iloc[-1]
 
-    def get_current_timestep_sim(self, name):
+    def get_current_timestep_sim_d(self, name):
         
         df = self.investments_future_steps[name]
         
         dtime = self.datetime
         
-        while True:
+        for i in range(1000):
             try:
                 val = df.loc[dtime.strftime('%Y-%m-%d')]
             except:
                 dtime += timedelta(hours=self.timestep_hours)
             else:
                 return val, dtime
+            
+        raise ValueError(f"No valid timestep found within 1000 iterations for {name}.")
+            
+    def get_current_timestep_sim_h(self, name):
         
+        df = self.investments_future_steps[name]
+        
+        dtime = self.datetime
+
+        for i in range(1000):
+            try:
+                val = df.loc[dtime.strftime('%Y-%m-%d %H:30:00-04:00')]
+            except:
+                dtime += timedelta(hours=self.timestep_hours)
+            else:
+                return val, dtime
+            
+        raise ValueError(f"No valid timestep found within 1000 iterations for {name}.")
+
     def next_timestep(self):
         
         self.datetime += timedelta(hours=self.timestep_hours)
         
         for name, ticker in self.investments.items():
             previous_state = self.investments_states[name]
-            timestep, date = self.get_current_timestep_sim(name)
+            if self.interval_str=='1d':
+                timestep, date = self.get_current_timestep_sim_d(name)
+            elif self.interval_str == '1h':
+                timestep, date = self.get_current_timestep_sim_h(name)   
             
             self.datetime = date
             
             self.investments_timesteps[name].append(timestep)
 
             current_state =  timestep * previous_state/previous_state[0]
-            #print(f"prev_state: {previous_state},  timestep: {timestep},  new_state:{current_state}")
             self.investments_states[name] = current_state
+
             
     def update_investment(self, name, value):
         
         value = min(value, self.balance + self.investments_states[name][1]) # cannot invest more than total portfolio value
         value = max(value, 0) # cannot have negative investment
         
-        if value<=(self.balance + self.investments_states[name][1]): # check if new value is less or equal to balance + current holding
+        if value<=(round(self.balance + self.investments_states[name][1],6)): # check if new value is less or equal to balance + current holding
             prev_holding = self.investments_states[name][1]
             
             
             if self.balance + prev_holding - value < 0:
                 raise ValueError(f"Value update error, value: {value}, prev_holding: {prev_holding}, balance: {self.balance}")  
             
-            self.investments_states[name][1] = value
-            self.balance += prev_holding - value # subtract increase in holding from balance so the increase is paid
+            self.investments_states[name][1] = round(value,4)
+            self.balance += round(prev_holding - value, 4) # subtract increase in holding from balance so the increase is paid
         else:
             raise ValueError(f"Attempted investment exceeds porfolio's total, total:{self.balance + self.investments_states[name][1]}, attempted investment: {value}")
         
