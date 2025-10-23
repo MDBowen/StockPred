@@ -18,12 +18,10 @@ class Simulate_Portfolio:
             self.interval_str = '1d'
         else:
             self.interval_str = f'{interval}h'
-        print(f"Using interval string: {self.interval_str}")
         self.investments_timesteps = {} 
         self.investments_future_steps = {}
-        # such that investment_timesteps[name][-1] is current close
         self.investments = {}
-        self.investments_states = {} # :: Name : [price, holdings]
+        self.investments_states = {}
         self.datetime = init_datetime
         self.init_date = init_datetime
         self.timestep = 0 
@@ -40,8 +38,6 @@ class Simulate_Portfolio:
     def get_current_timestep(self, ticker):
         return ticker.history(start=self.datetime-timedelta(hours=self.timestep_hours*5), end=self.datetime, interval=self.interval_str)['Close'].iloc[-1]
 
-
-    """Currently experimentally used (all get_current_timestep_sim functions)"""
     def get_current_timestep_sim_d(self, name):
         
         df = self.investments_future_steps[name]
@@ -56,14 +52,14 @@ class Simulate_Portfolio:
             else:
                 return val, dtime
             
-        assert False, f"No valid timestep found within 1000 iterations for {name}."
+        raise ValueError(f"No valid timestep found within 1000 iterations for {name}.")
             
     def get_current_timestep_sim_h(self, name):
         
         df = self.investments_future_steps[name]
         
         dtime = self.datetime
-        #dtime_found = dtime.strftime('%Y-%m-%d %H:30:00-04:00')
+
         for i in range(1000):
             try:
                 val = df.loc[dtime.strftime('%Y-%m-%d %H:30:00-04:00')]
@@ -72,32 +68,7 @@ class Simulate_Portfolio:
             else:
                 return val, dtime
             
-        assert False, f"No valid timestep found within 1000 iterations for {name}."
-
-            
-    def get_current_timestep_sim(self, name):
-
-        dtime = self.datetime
-        org_dtime = dtime
-        df = self.investments_future_steps[name]
-
-        for _ in range(1000):  # Limit to 1000 iterations to prevent infinite loop
-            start_time = pd.to_datetime(dtime.replace(minute=0, second=0, microsecond=0))
-            endtime = pd.to_datetime(start_time + timedelta(hours=self.timestep_hours) - timedelta(seconds=1))
-            mask = (df.index >= start_time) & (df.index <= endtime)
-
-            subset = df.loc[mask]
-
-            if not subset.empty:
-                return subset.iloc[-1], dtime
-            
-            datetime += timedelta(hours=self.timestep_hours)
-
-            if datetime > df.index[-1]:
-                raise ValueError("No valid timestep found within data range.")
-            
-
-        raise ValueError("No valid timestep found within 1000 iterations for {org_dtime}.")
+        raise ValueError(f"No valid timestep found within 1000 iterations for {name}.")
 
     def next_timestep(self):
         
@@ -113,7 +84,6 @@ class Simulate_Portfolio:
             self.datetime = date
             
             self.investments_timesteps[name].append(timestep)
-            #print(f"prev_state: {previous_state},  timestep: {timestep}")
 
             current_state =  timestep * previous_state/previous_state[0]
             self.investments_states[name] = current_state
